@@ -1,0 +1,596 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farmer Management System (FMS) - Government of India</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1B5E20',
+                        secondary: '#FF6F00',
+                        accent: '#2196F3',
+                        success: '#4CAF50',
+                        warning: '#FF9800',
+                        error: '#F44336'
+                    },
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                        'hindi': ['Noto Sans Devanagari', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-inter">
+    <!-- @COMPONENT: Header -->
+    <header class="bg-white shadow-sm border-b-2 border-primary">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-seedling text-primary text-2xl"></i>
+                        <div>
+                            <h1 class="text-xl font-bold text-gray-900">FMS</h1>
+                            <p class="text-xs text-gray-600">किसान प्रबंधन प्रणाली</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Online/Offline Status -->
+                    <div class="hidden sm:flex items-center space-x-2 bg-success text-white px-3 py-1 rounded-full text-sm">
+                        <i class="fas fa-wifi text-xs"></i>
+                        <span data-bind="connectionStatus">Online</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Language Selector -->
+                    <div class="relative">
+                        <select class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent" data-implementation="Language switching via Gemini API">
+                            <option value="en">English</option>
+                            <option value="hi">हिंदी</option>
+                            <option value="te">తెలుగు</option>
+                            <option value="ta">தமிழ்</option>
+                            <option value="bn">বাংলা</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Voice Assistant Toggle -->
+                    <button class="bg-secondary text-white p-2 rounded-full hover:bg-orange-600 transition-colors" data-implementation="Voice assistant activation">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    
+                    <!-- User Profile Dropdown -->
+                    <div class="relative">
+                        <button class="flex items-center space-x-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-green-800 transition-colors">
+                            <i class="fas fa-user"></i>
+                            <span data-bind="user.name">राम शर्मा</span>
+                            <i class="fas fa-chevron-down text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- @END_COMPONENT: Header -->
+
+    <!-- @COMPONENT: MainNavigation -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8 overflow-x-auto">
+                <a href="#dashboard" class="flex items-center space-x-2 px-3 py-4 border-b-2 border-primary text-primary font-medium">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#profile" class="flex items-center space-x-2 px-3 py-4 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-user-circle"></i>
+                    <span>Profile</span>
+                </a>
+                <a href="#schemes" class="flex items-center space-x-2 px-3 py-4 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Schemes</span>
+                </a>
+                <a href="#weather" class="flex items-center space-x-2 px-3 py-4 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-cloud-sun"></i>
+                    <span>Weather</span>
+                </a>
+                <a href="#market" class="flex items-center space-x-2 px-3 py-4 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Market</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: MainNavigation -->
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- @COMPONENT: DashboardStats -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-primary">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Active Schemes</p>
+                        <p class="text-3xl font-bold text-gray-900" data-bind="stats.activeSchemes">12</p>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-full">
+                        <i class="fas fa-file-contract text-primary text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm">
+                    <span class="text-success"><i class="fas fa-arrow-up mr-1"></i>2 new</span>
+                    <span class="text-gray-500 ml-2">this month</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-secondary">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Benefits Received</p>
+                        <p class="text-3xl font-bold text-gray-900" data-bind="stats.benefits">₹45,000</p>
+                    </div>
+                    <div class="bg-secondary bg-opacity-10 p-3 rounded-full">
+                        <i class="fas fa-rupee-sign text-secondary text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm">
+                    <span class="text-success"><i class="fas fa-arrow-up mr-1"></i>15%</span>
+                    <span class="text-gray-500 ml-2">from last year</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-accent">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Land Area</p>
+                        <p class="text-3xl font-bold text-gray-900" data-bind="farmer.landArea">2.5 acres</p>
+                    </div>
+                    <div class="bg-accent bg-opacity-10 p-3 rounded-full">
+                        <i class="fas fa-map text-accent text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm">
+                    <span class="text-gray-500">3 plots registered</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-success">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Crop Season</p>
+                        <p class="text-3xl font-bold text-gray-900">Kharif</p>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded-full">
+                        <i class="fas fa-leaf text-success text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm">
+                    <span class="text-gray-500">Rice, Cotton planted</span>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: DashboardStats -->
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- @COMPONENT: RecommendedSchemes -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-sm">
+                    <div class="p-6 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-xl font-bold text-gray-900">Recommended Schemes</h2>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-sm text-gray-500">Powered by</span>
+                                <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-2 py-1 rounded text-xs font-medium">
+                                    Gemini AI
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Personalized recommendations based on your profile</p>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        <!-- @MAP: recommendedSchemes.map(scheme => ( -->
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <h3 class="font-semibold text-gray-900" data-bind="scheme.name">PM-KISAN Samman Nidhi</h3>
+                                        <span class="bg-success text-white text-xs px-2 py-1 rounded-full">New</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-3" data-bind="scheme.description">Direct income support of ₹6,000 per year to small and marginal farmers. No application fee required.</p>
+                                    
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500 mb-3">
+                                        <span><i class="fas fa-calendar-alt mr-1"></i>Deadline: 31 Dec 2024</span>
+                                        <span><i class="fas fa-rupee-sign mr-1"></i>₹6,000/year</span>
+                                        <span><i class="fas fa-map-marker-alt mr-1"></i>All States</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm font-medium text-success">95% Match</span>
+                                        <div class="w-20 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-success h-2 rounded-full" style="width: 95%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col space-y-2 ml-4">
+                                    <button class="bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors" data-implementation="Navigate to scheme application">
+                                        Apply Now
+                                    </button>
+                                    <button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors" data-implementation="Save scheme to bookmarks">
+                                        <i class="fas fa-bookmark mr-1"></i>Save
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <h3 class="font-semibold text-gray-900">Soil Health Card Scheme</h3>
+                                        <span class="bg-accent text-white text-xs px-2 py-1 rounded-full">Updated</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-3">Free soil testing and nutrient recommendations for optimal crop yield. Available at district agriculture offices.</p>
+                                    
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500 mb-3">
+                                        <span><i class="fas fa-calendar-alt mr-1"></i>Ongoing</span>
+                                        <span><i class="fas fa-flask mr-1"></i>Free Testing</span>
+                                        <span><i class="fas fa-map-marker-alt mr-1"></i>Maharashtra</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm font-medium text-accent">88% Match</span>
+                                        <div class="w-20 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-accent h-2 rounded-full" style="width: 88%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col space-y-2 ml-4">
+                                    <button class="bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors">
+                                        Learn More
+                                    </button>
+                                    <button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                                        <i class="fas fa-bookmark mr-1"></i>Save
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <h3 class="font-semibold text-gray-900">Pradhan Mantri Fasal Bima Yojana</h3>
+                                        <span class="bg-warning text-white text-xs px-2 py-1 rounded-full">Expiring Soon</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-3">Crop insurance scheme providing financial support to farmers in case of crop loss due to natural disasters.</p>
+                                    
+                                    <div class="flex items-center space-x-4 text-sm text-gray-500 mb-3">
+                                        <span><i class="fas fa-calendar-alt mr-1"></i>Deadline: 15 Nov 2024</span>
+                                        <span><i class="fas fa-shield-alt mr-1"></i>Crop Insurance</span>
+                                        <span><i class="fas fa-map-marker-alt mr-1"></i>All States</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm font-medium text-warning">75% Match</span>
+                                        <div class="w-20 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-warning h-2 rounded-full" style="width: 75%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col space-y-2 ml-4">
+                                    <button class="bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-green-800 transition-colors">
+                                        Apply Now
+                                    </button>
+                                    <button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                                        <i class="fas fa-bookmark mr-1"></i>Save
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                        
+                        <div class="text-center pt-4">
+                            <button class="bg-accent text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors" data-implementation="Load more schemes from API">
+                                View All Schemes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: RecommendedSchemes -->
+
+            <!-- @COMPONENT: Sidebar -->
+            <div class="space-y-6">
+                <!-- Weather Widget -->
+                <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-sm text-white p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold">Weather Update</h3>
+                        <i class="fas fa-cloud-sun text-2xl"></i>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span data-bind="weather.location">Pune, Maharashtra</span>
+                            <span class="text-2xl font-bold" data-bind="weather.temperature">28°C</span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-eye"></i>
+                            <span class="text-sm" data-bind="weather.condition">Partly Cloudy</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4 pt-2 border-t border-blue-400">
+                            <div class="text-center">
+                                <p class="text-xs opacity-80">Humidity</p>
+                                <p class="font-semibold" data-bind="weather.humidity">65%</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-xs opacity-80">Wind</p>
+                                <p class="font-semibold" data-bind="weather.wind">12 km/h</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-400 bg-opacity-30 rounded-lg p-3 mt-4">
+                            <p class="text-sm"><i class="fas fa-info-circle mr-2"></i>Good conditions for irrigation today</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-xl shadow-sm p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                    
+                    <div class="space-y-3">
+                        <button class="w-full flex items-center space-x-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors" data-implementation="Update farmer profile">
+                            <div class="bg-primary bg-opacity-10 p-2 rounded-lg">
+                                <i class="fas fa-user-edit text-primary"></i>
+                            </div>
+                            <span class="font-medium text-gray-900">Update Profile</span>
+                        </button>
+                        
+                        <button class="w-full flex items-center space-x-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors" data-implementation="Add new crop season data">
+                            <div class="bg-success bg-opacity-10 p-2 rounded-lg">
+                                <i class="fas fa-plus-circle text-success"></i>
+                            </div>
+                            <span class="font-medium text-gray-900">Add Crop Data</span>
+                        </button>
+                        
+                        <button class="w-full flex items-center space-x-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors" data-implementation="Check application status">
+                            <div class="bg-accent bg-opacity-10 p-2 rounded-lg">
+                                <i class="fas fa-clipboard-check text-accent"></i>
+                            </div>
+                            <span class="font-medium text-gray-900">Check Status</span>
+                        </button>
+                        
+                        <button class="w-full flex items-center space-x-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors" data-implementation="Contact support agent">
+                            <div class="bg-secondary bg-opacity-10 p-2 rounded-lg">
+                                <i class="fas fa-headset text-secondary"></i>
+                            </div>
+                            <span class="font-medium text-gray-900">Get Help</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Notifications -->
+                <div class="bg-white rounded-xl shadow-sm p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Notifications</h3>
+                        <button class="text-sm text-accent hover:text-blue-600">Mark all read</button>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <!-- @MAP: notifications.map(notification => ( -->
+                        <div class="flex items-start space-x-3 p-3 bg-green-50 rounded-lg border-l-4 border-success">
+                            <div class="bg-success text-white p-1 rounded-full text-xs">
+                                <i class="fas fa-bell"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900" data-bind="notification.title">New Scheme Available</p>
+                                <p class="text-xs text-gray-600" data-bind="notification.message">PM Kisan benefits credited to your account</p>
+                                <p class="text-xs text-gray-500 mt-1" data-bind="notification.time">2 hours ago</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg border-l-4 border-warning">
+                            <div class="bg-warning text-white p-1 rounded-full text-xs">
+                                <i class="fas fa-exclamation"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">Deadline Reminder</p>
+                                <p class="text-xs text-gray-600">Crop insurance application expires in 3 days</p>
+                                <p class="text-xs text-gray-500 mt-1">1 day ago</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg border-l-4 border-accent">
+                            <div class="bg-accent text-white p-1 rounded-full text-xs">
+                                <i class="fas fa-info"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-900">Weather Alert</p>
+                                <p class="text-xs text-gray-600">Heavy rainfall expected next week</p>
+                                <p class="text-xs text-gray-500 mt-1">3 days ago</p>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: Sidebar -->
+        </div>
+
+        <!-- @COMPONENT: MarketPricesSection -->
+        <div class="mt-8 bg-white rounded-xl shadow-sm">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-bold text-gray-900">Market Prices</h2>
+                <p class="text-sm text-gray-600 mt-1">Live prices from nearby mandis</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- @MAP: marketPrices.map(price => ( -->
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900" data-bind="price.crop">Rice (PR 106)</h4>
+                            <span class="text-success text-sm font-medium"><i class="fas fa-arrow-up mr-1"></i>+5%</span>
+                        </div>
+                        <p class="text-2xl font-bold text-gray-900" data-bind="price.current">₹2,100</p>
+                        <p class="text-sm text-gray-600">per quintal</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span data-bind="price.mandi">Pune Mandi</span> • <span data-bind="price.date">Today</span>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900">Cotton</h4>
+                            <span class="text-error text-sm font-medium"><i class="fas fa-arrow-down mr-1"></i>-2%</span>
+                        </div>
+                        <p class="text-2xl font-bold text-gray-900">₹5,800</p>
+                        <p class="text-sm text-gray-600">per quintal</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span>Nagpur Mandi</span> • <span>Today</span>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900">Wheat</h4>
+                            <span class="text-success text-sm font-medium"><i class="fas fa-arrow-up mr-1"></i>+3%</span>
+                        </div>
+                        <p class="text-2xl font-bold text-gray-900">₹2,350</p>
+                        <p class="text-sm text-gray-600">per quintal</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span>Mumbai APMC</span> • <span>Today</span>
+                        </div>
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900">Sugarcane</h4>
+                            <span class="text-gray-500 text-sm font-medium">0%</span>
+                        </div>
+                        <p class="text-2xl font-bold text-gray-900">₹340</p>
+                        <p class="text-sm text-gray-600">per quintal</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span>Kolhapur</span> • <span>Today</span>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <button class="bg-accent text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors" data-implementation="Navigate to detailed market prices">
+                        View Detailed Prices
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: MarketPricesSection -->
+    </main>
+
+    <!-- @COMPONENT: VoiceAssistant -->
+    <div class="fixed bottom-6 right-6" data-implementation="Voice assistant interface">
+        <div class="bg-secondary text-white p-4 rounded-full shadow-lg hover:bg-orange-600 transition-colors cursor-pointer" id="voiceButton">
+            <i class="fas fa-microphone text-xl"></i>
+        </div>
+        
+        <!-- Voice Command Overlay (Hidden by default) -->
+        <div class="hidden fixed inset-0 bg-black bg-opacity-50 z-50" id="voiceOverlay">
+            <div class="absolute bottom-24 right-6 bg-white rounded-xl shadow-xl p-6 w-80">
+                <div class="text-center">
+                    <div class="bg-secondary bg-opacity-10 p-4 rounded-full w-16 h-16 mx-auto mb-4">
+                        <i class="fas fa-microphone text-secondary text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Voice Assistant</h3>
+                    <p class="text-sm text-gray-600 mb-4">Listening... Say your command</p>
+                    
+                    <div class="space-y-2 text-left">
+                        <p class="text-xs text-gray-500">Try saying:</p>
+                        <ul class="text-xs text-gray-600 space-y-1">
+                            <li>"Show my schemes" - नेरे स्कीम दिखाओ</li>
+                            <li>"Check weather" - मौसम देखो</li>
+                            <li>"Market prices" - बाजार भाव</li>
+                        </ul>
+                    </div>
+                    
+                    <button class="mt-4 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition-colors" data-event="click:stopVoiceAssistant">
+                        Stop Listening
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: VoiceAssistant -->
+
+    <!-- @COMPONENT: OfflineIndicator -->
+    <div class="hidden fixed bottom-6 left-6 bg-warning text-white px-4 py-3 rounded-lg shadow-lg" id="offlineIndicator" data-implementation="Show when offline">
+        <div class="flex items-center space-x-2">
+            <i class="fas fa-wifi-slash"></i>
+            <span class="text-sm font-medium">Working Offline</span>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: OfflineIndicator -->
+
+    <script>
+        (function() {
+            // TODO: Implement voice assistant functionality
+            // TODO: Implement offline mode with service worker
+            // TODO: Implement Gemini API integration for scheme discovery
+            // TODO: Implement multilingual support via Gemini API
+            // TODO: Implement real-time weather and market price updates
+            // TODO: Implement farmer profile management
+            // TODO: Implement scheme application workflow
+            // TODO: Implement notification system
+            
+            // Mock voice assistant toggle
+            const voiceButton = document.getElementById('voiceButton');
+            const voiceOverlay = document.getElementById('voiceOverlay');
+            
+            if (voiceButton && voiceOverlay) {
+                voiceButton.addEventListener('click', () => {
+                    voiceOverlay.classList.remove('hidden');
+                    // TODO: Start speech recognition
+                });
+                
+                voiceOverlay.addEventListener('click', (e) => {
+                    if (e.target === voiceOverlay) {
+                        voiceOverlay.classList.add('hidden');
+                        // TODO: Stop speech recognition
+                    }
+                });
+            }
+            
+            // Mock offline detection
+            const offlineIndicator = document.getElementById('offlineIndicator');
+            
+            function updateOnlineStatus() {
+                const connectionStatus = document.querySelector('[data-bind="connectionStatus"]');
+                if (navigator.onLine) {
+                    if (connectionStatus) connectionStatus.textContent = 'Online';
+                    if (offlineIndicator) offlineIndicator.classList.add('hidden');
+                } else {
+                    if (connectionStatus) connectionStatus.textContent = 'Offline';
+                    if (offlineIndicator) offlineIndicator.classList.remove('hidden');
+                }
+            }
+            
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+            updateOnlineStatus();
+            
+            // TODO: Implement service worker for offline functionality
+            // TODO: Implement data synchronization when back online
+            // TODO: Implement local storage for offline data
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+Build a Farmer Management System (FMS) web  application that allows Indian farmers to register their details, manage their farming profiles, and discover personalized government schemes and benefits. Integrate Gemini API to fetch and display the most relevant and up-to-date government schemes based on user location, crop type, landholding, and eligibility. The system should support multilingual interfaces (Hindi, English, and regional languages) and work in both online and offline mode
+
+✅ Key Features:
+
+👤 Farmer Registration & Profile
+
+Aadhar-based or mobile number OTP verification
+
+Personal details (Name, Age, Gender)
+
+Land details (Area, Type, Ownership)
+
+Crop details (Current & historical)
+
+Livestock details (if any)
+
+Location (village, district, state via GPS or manual entry)
+
+
+🔍 Government Scheme Discovery (Using Gemini API)
+
+Fetch latest schemes from central & state government
+
+Personalize schemes based on farmer profile:
+
+Land size
+
+Crop types
+
+Income category
+
+Caste/Tribe category (SC/ST/OBC/General)
+
+Region-specific schemes
+
+
+Multilingual support for scheme descriptions
+
+Bookmark/save schemes
+
+Apply directly (link to scheme portal or pre-fill form)
+
+
+🔔 Smart Notifications
+
+New schemes launched
+
+Deadlines for applications
+
+Personalized tips (weather alerts, subsidy availability)
+
+
+📊 Dashboard & Analytics
+
+Track applied schemes
+
+Benefits received
+
+Subsidy balance
+
+Progress updates (application status)
+
+
+🌐 Online/Offline Mode
+
+Store data locally when offline
+
+Sync when network available
+
+Allow kiosk or agent access in rural areas
+
+
+🛠️ Additional Modules (Optional)
+
+Weather integration (via API)
+
+Market price updates
+
+Farming best practices
+
+Fertilizer/pesticide recommendation engine
+
+Voice-based assistant (for non-literate users)
+
+
+🔐 Security & Privacy
+
+Secure login
+
+Data encryption
+
+Farmer consent for data usage
+
+
+
+---
+
+📦 Tech Stack Suggestion:
+
+Frontend: React.js
+
+Backend: node js 
+
+Database: mysql or whatever you want 
+
+APIs:
+
+Gemini API (for scheme info)
+
+Agri APIs (for weather, crop info)
+
+complete the whole project and give me all the files seprately with proper file structure
