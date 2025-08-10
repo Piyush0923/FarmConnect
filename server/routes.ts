@@ -1,18 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { geminiService } from "./services/gemini";
+import { openRouterService } from "./services/openrouter";
 import { weatherService } from "./services/weather";
 import { marketService } from "./services/market";
-import { 
-  insertUserSchema, insertFarmerSchema, insertLandSchema, insertCropSchema,
-  insertLivestockSchema, insertApplicationSchema, insertBookmarkSchema,
-  insertNotificationSchema 
-} from "@shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
 // Middleware to verify JWT token
 const authenticateToken = (req: any, res: any, next: any) => {
@@ -37,23 +32,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
-      const existingUser = await storage.getUserByUsername(userData.username);
+      const { username, password } = req.body;
       
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+
+      const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
-      const user = await storage.createUser(userData);
-      
-      // Create basic farmer profile automatically
-      const basicFarmerData = {
-        userId: user.id,
-        name: '',
-        mobileNumber: '',
-        language: 'en'
-      };
-      await storage.createFarmer(basicFarmerData);
+      const user = await storage.createUser({ username, password });
       
       const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
       
@@ -89,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Farmer profile routes
   app.post("/api/farmer/profile", authenticateToken, async (req, res) => {
     try {
-      const farmerData = insertFarmerSchema.parse({ ...req.body, userId: (req as any).user.userId });
+      const farmerData = { ...req.body, userId: (req as any).user.userId };
       const farmer = await storage.createFarmer(farmerData);
       res.json(farmer);
     } catch (error: any) {
@@ -125,6 +115,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Location service using OpenRouter
+  app.post("/api/location/detect", authenticateToken, async (req, res) => {
+    try {
+      const { address } = req.body;
+      
+      if (!address) {
+        return res.status(400).json({ message: "Address is required" });
+      }
+
+      const locationData = await openRouterService.getLocationFromAddress(address);
+      
+      if (locationData) {
+        // Update farmer profile with location data
+        const farmer = await storage.getFarmerByUserId((req as any).user.userId);
+        if (farmer) {
+          await storage.updateFarmer(farmer.id, {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            district: locationData.district,
+            state: locationData.state
+          });
+        }
+      }
+
+      res.json(locationData);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Land management routes
   app.post("/api/farmer/lands", authenticateToken, async (req, res) => {
     try {
@@ -133,11 +153,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      const landData = insertLandSchema.parse({ ...req.body, farmerId: farmer.id });
+      const landData = { ...req.body, farmerId: farmer.id };
       const land = await storage.createLand(landData);
       res.json(land);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/farmer/lands", authenticateToken, async (req, res) => {
+    try {
+      const farmer = await storage.getFarmerByUserId((req as any).user.userId);
+      if (!farmer) {
+        return res.status(404).json({ message: "Farmer profile not found" });
+      }
+
+      const lands = await storage.getLandsByFarmerId(farmer.id);
+      res.json(lands);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
@@ -149,11 +183,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      const cropData = insertCropSchema.parse({ ...req.body, farmerId: farmer.id });
+      const cropData = { ...req.body, farmerId: farmer.id };
       const crop = await storage.createCrop(cropData);
       res.json(crop);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/farmer/crops", authenticateToken, async (req, res) => {
+    try {
+      const farmer = await storage.getFarmerByUserId((req as any).user.userId);
+      if (!farmer) {
+        return res.status(404).json({ message: "Farmer profile not found" });
+      }
+
+      const crops = await storage.getCropsByFarmerId(farmer.id);
+      res.json(crops);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
@@ -165,7 +213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      const livestockData = insertLivestockSchema.parse({ ...req.body, farmerId: farmer.id });
+      const livestockData = { ...req.body, farmerId: farmer.id };
       const livestock = await storage.createLivestock(livestockData);
       res.json(livestock);
     } catch (error: any) {
@@ -173,10 +221,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Scheme discovery routes
+  // Scheme discovery routes using OpenRouter
   app.get("/api/schemes", authenticateToken, async (req, res) => {
     try {
-      const schemes = await storage.getSchemes(req.query);
+      const farmer = await storage.getFarmerByUserId((req as any).user.userId);
+      if (!farmer) {
+        return res.status(404).json({ message: "Farmer profile not found" });
+      }
+
+      // Get existing schemes first
+      let schemes = await storage.getSchemes();
+      
+      // If no schemes exist, generate them using OpenRouter
+      if (schemes.length === 0) {
+        const farmerProfile = await storage.getFarmerWithProfile(farmer.id);
+        const generatedSchemes = await openRouterService.generateSchemes(farmerProfile);
+        
+        // Store generated schemes
+        for (const scheme of generatedSchemes) {
+          await storage.createScheme(scheme);
+        }
+        
+        schemes = generatedSchemes;
+      }
+
       res.json(schemes);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -190,48 +258,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      // Check if profile is complete enough for recommendations
-      if (!farmer.district || !farmer.state || !farmer.name) {
-        const basicSchemes = await storage.getSchemes({ isActive: true });
-        return res.json(basicSchemes.slice(0, 3)); // Return top 3 schemes
+      const farmerProfile = await storage.getFarmerWithProfile(farmer.id);
+      
+      // Get all schemes
+      let allSchemes = await storage.getSchemes();
+      
+      // If no schemes exist, generate them
+      if (allSchemes.length === 0) {
+        const generatedSchemes = await openRouterService.generateSchemes(farmerProfile);
+        
+        for (const scheme of generatedSchemes) {
+          await storage.createScheme(scheme);
+        }
+        
+        allSchemes = generatedSchemes;
       }
 
-      const recommendedSchemes = await storage.getRecommendedSchemes(farmer.id);
+      // Use OpenRouter to analyze eligibility and get recommendations
+      const recommendations = await openRouterService.analyzeSchemeEligibility(farmerProfile, allSchemes);
       
-      // Enhance with AI recommendations if Gemini is available
-      try {
-        const farmerProfile = await storage.getFarmerWithProfile(farmer.id);
-        if (farmerProfile && process.env.GEMINI_API_KEY) {
-          const aiRecommendations = await geminiService.analyzeSchemeEligibility(
-            farmerProfile, 
-            recommendedSchemes
-          );
-          
-          // Merge AI insights with database recommendations
-          const enhancedSchemes = recommendedSchemes.map(scheme => {
-            const aiRec = aiRecommendations.find(r => r.schemeId === scheme.id);
-            return aiRec ? { ...scheme, ...aiRec } : scheme;
-          });
-          
-          return res.json(enhancedSchemes);
-        }
-      } catch (aiError) {
-        console.error("AI enhancement failed:", aiError);
-      }
+      // Map recommendations back to schemes with match percentages
+      const recommendedSchemes = recommendations
+        .filter(rec => rec.matchPercentage >= 60)
+        .sort((a, b) => b.matchPercentage - a.matchPercentage)
+        .slice(0, 5)
+        .map(rec => {
+          const scheme = allSchemes.find(s => s.id === rec.schemeId);
+          return scheme ? { ...scheme, matchPercentage: rec.matchPercentage } : null;
+        })
+        .filter(Boolean);
 
       res.json(recommendedSchemes);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.get("/api/schemes/:id", authenticateToken, async (req, res) => {
-    try {
-      const scheme = await storage.getScheme(req.params.id);
-      if (!scheme) {
-        return res.status(404).json({ message: "Scheme not found" });
-      }
-      res.json(scheme);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -259,19 +316,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      const applicationData = insertApplicationSchema.parse({
+      const applicationData = {
         ...req.body,
-        farmerId: farmer.id
-      });
+        farmerId: farmer.id,
+        status: 'pending'
+      };
       
       const application = await storage.createApplication(applicationData);
       
-      // Create notification for successful application
+      // Create notification
       await storage.createNotification({
         farmerId: farmer.id,
         title: "Application Submitted",
-        message: `Your application for scheme has been submitted successfully.`,
-        type: "success"
+        message: "Your scheme application has been submitted successfully.",
+        type: "success",
+        isRead: false
       });
 
       res.json(application);
@@ -302,10 +361,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      const bookmarkData = insertBookmarkSchema.parse({
+      const bookmarkData = {
         ...req.body,
         farmerId: farmer.id
-      });
+      };
 
       const bookmark = await storage.createBookmark(bookmarkData);
       res.json(bookmark);
@@ -343,29 +402,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/notifications/:id/read", authenticateToken, async (req, res) => {
-    try {
-      await storage.markNotificationAsRead(req.params.id);
-      res.json({ message: "Notification marked as read" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.put("/api/notifications/read-all", authenticateToken, async (req, res) => {
-    try {
-      const farmer = await storage.getFarmerByUserId((req as any).user.userId);
-      if (!farmer) {
-        return res.status(404).json({ message: "Farmer profile not found" });
-      }
-
-      await storage.markAllNotificationsAsRead(farmer.id);
-      res.json({ message: "All notifications marked as read" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   // Dashboard stats
   app.get("/api/dashboard/stats", authenticateToken, async (req, res) => {
     try {
@@ -381,7 +417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Weather routes
+  // Weather routes using OpenRouter
   app.get("/api/weather", authenticateToken, async (req, res) => {
     try {
       const farmer = await storage.getFarmerByUserId((req as any).user.userId);
@@ -411,23 +447,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Translation routes
+  // Translation routes using OpenRouter
   app.post("/api/translate", authenticateToken, async (req, res) => {
     try {
       const { text, targetLanguage } = req.body;
       
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(503).json({ message: "Translation service not available" });
-      }
-
-      const translation = await geminiService.translateContent({ text, targetLanguage });
+      const translation = await openRouterService.translateContent({ text, targetLanguage });
       res.json(translation);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  // Voice assistant routes
+  // Voice assistant routes using OpenRouter
   app.post("/api/voice/command", authenticateToken, async (req, res) => {
     try {
       const { command } = req.body;
@@ -437,49 +469,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Farmer profile not found" });
       }
 
-      // Basic voice command processing
-      const commandLower = command.toLowerCase();
+      const farmerProfile = await storage.getFarmerWithProfile(farmer.id);
+      const result = await openRouterService.processVoiceCommand(command, farmerProfile);
       
-      let intent = 'unknown';
-      let response = 'Sorry, I didn\'t understand that command.';
-      let action = '';
-      let data = {};
-      
-      if (commandLower.includes('weather') || commandLower.includes('मौसम') || commandLower.includes('వాతావరణం')) {
-        intent = 'weather';
-        response = 'Here is the current weather information for your location.';
-        action = 'navigate';
-        data = { path: '/weather' };
-      } else if (commandLower.includes('scheme') || commandLower.includes('योजना') || commandLower.includes('పథకం')) {
-        intent = 'schemes';
-        response = 'Here are the government schemes available for you.';
-        action = 'navigate';
-        data = { path: '/schemes' };
-      } else if (commandLower.includes('profile') || commandLower.includes('प्रोफाइल') || commandLower.includes('ప్రొఫైల్')) {
-        intent = 'navigate';
-        response = 'Opening your profile page.';
-        action = 'navigate';
-        data = { path: '/profile' };
-      } else if (commandLower.includes('dashboard') || commandLower.includes('डैशबोर्ड') || commandLower.includes('డాష్‌బోర్డ్')) {
-        intent = 'navigate';
-        response = 'Opening your dashboard.';
-        action = 'navigate';
-        data = { path: '/dashboard' };
-      } else if (commandLower.includes('market') || commandLower.includes('price') || commandLower.includes('बाजार') || commandLower.includes('దరలు')) {
-        intent = 'market';
-        response = 'Here are the current market prices for agricultural products.';
-        action = 'navigate';
-        data = { path: '/market' };
-      } else if (commandLower.includes('help') || commandLower.includes('मदद') || commandLower.includes('సహాయం')) {
-        intent = 'help';
-        response = 'I can help you check weather, view schemes, navigate to your profile, or check market prices. Just say what you need!';
-        action = 'help';
-      } else {
-        response = 'I can help you with weather information, government schemes, profile updates, market prices, or navigation. What would you like to know?';
-        action = 'help';
-      }
-      
-      res.json({ intent, response, action, data });
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ 
         intent: 'error',
@@ -489,32 +482,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-
-  // Farming tips
-  app.get("/api/farming/tips", authenticateToken, async (req, res) => {
-    try {
-      const farmer = await storage.getFarmerByUserId((req as any).user.userId);
-      if (!farmer) {
-        return res.status(404).json({ message: "Farmer profile not found" });
-      }
-
-      if (!process.env.GEMINI_API_KEY) {
-        return res.json([
-          "Ensure proper irrigation management based on crop requirements",
-          "Monitor soil moisture levels regularly",
-          "Apply organic compost to improve soil health",
-          "Check for pest and disease symptoms weekly"
-        ]);
-      }
-
-      const farmerProfile = await storage.getFarmerWithProfile(farmer.id);
-      const tips = await geminiService.generateFarmingTips(farmerProfile!);
-      res.json(tips);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
 
   const httpServer = createServer(app);
   return httpServer;

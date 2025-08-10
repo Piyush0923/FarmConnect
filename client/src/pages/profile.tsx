@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/hooks/use-language";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import Layout from "@/components/layout";
@@ -15,19 +16,32 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, User, MapPin, Crop, PiggyBank, Plus, Edit, Save, Navigation } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { 
+  User, 
+  MapPin, 
+  Wheat, 
+  Cow, 
+  Plus, 
+  Trash2, 
+  Save, 
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Navigation
+} from "lucide-react";
 
-const farmerProfileSchema = z.object({
+// Validation schemas
+const personalInfoSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   fatherName: z.string().optional(),
   age: z.number().min(18, "Age must be at least 18").max(100, "Age must be less than 100"),
   gender: z.enum(["male", "female", "other"]),
   category: z.enum(["general", "obc", "sc", "st"]),
-  aadharNumber: z.string().regex(/^\d{12}$/, "Aadhar number must be 12 digits").optional(),
   mobileNumber: z.string().regex(/^\d{10}$/, "Mobile number must be 10 digits"),
+  aadharNumber: z.string().regex(/^\d{12}$/, "Aadhar number must be 12 digits").optional(),
   address: z.string().min(10, "Address must be at least 10 characters"),
   village: z.string().min(2, "Village name is required"),
   district: z.string().min(2, "District name is required"),
@@ -40,18 +54,20 @@ const farmerProfileSchema = z.object({
 
 const landSchema = z.object({
   surveyNumber: z.string().optional(),
-  area: z.string().min(1, "Area is required"),
+  area: z.number().min(0.1, "Area must be at least 0.1 acres"),
   landType: z.enum(["irrigated", "rain-fed", "dry"]),
   ownershipType: z.enum(["owned", "leased", "sharecropper"]),
-  soilType: z.string().optional(),
+  soilType: z.enum(["black", "red", "alluvial", "sandy", "clay"]),
 });
 
 const cropSchema = z.object({
   cropName: z.string().min(2, "Crop name is required"),
   variety: z.string().optional(),
   season: z.enum(["kharif", "rabi", "summer"]),
-  area: z.string().min(1, "Area is required"),
-  year: z.number().default(new Date().getFullYear()),
+  area: z.number().min(0.1, "Area must be at least 0.1 acres"),
+  year: z.number().min(2020).max(new Date().getFullYear() + 1),
+  sowingDate: z.date().optional(),
+  expectedHarvest: z.date().optional(),
 });
 
 const livestockSchema = z.object({
@@ -60,23 +76,20 @@ const livestockSchema = z.object({
   breed: z.string().optional(),
 });
 
-type FarmerProfileForm = z.infer<typeof farmerProfileSchema>;
+type PersonalInfoForm = z.infer<typeof personalInfoSchema>;
 type LandForm = z.infer<typeof landSchema>;
 type CropForm = z.infer<typeof cropSchema>;
 type LivestockForm = z.infer<typeof livestockSchema>;
 
 export default function Profile() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const { language } = useLanguage();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState("personal");
-  const [isEditing, setIsEditing] = useState(false);
-  const [showAddLand, setShowAddLand] = useState(false);
-  const [showAddCrop, setShowAddCrop] = useState(false);
-  const [showAddLivestock, setShowAddLivestock] = useState(false);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -86,35 +99,41 @@ export default function Profile() {
   }, [user, setLocation]);
 
   // Fetch farmer profile
-  const { data: farmerProfile, isLoading: profileLoading, error: profileError } = useQuery({
+  const { data: farmerProfile, isLoading: profileLoading } = useQuery({
     queryKey: ["/api/farmer/profile"],
     enabled: !!user,
-  }) as { data: any, isLoading: boolean, error: any };
+  }) as { data: any, isLoading: boolean };
 
   // Forms
-  const profileForm = useForm<FarmerProfileForm>({
-    resolver: zodResolver(farmerProfileSchema),
+  const personalForm = useForm<PersonalInfoForm>({
+    resolver: zodResolver(personalInfoSchema),
     defaultValues: {
       name: "",
+      fatherName: "",
       age: 25,
       gender: "male",
       category: "general",
       mobileNumber: "",
+      aadharNumber: "",
       address: "",
       village: "",
       district: "",
       state: "",
       pincode: "",
-      language: "en",
+      bankAccountNumber: "",
+      ifscCode: "",
+      language: language,
     },
   });
 
   const landForm = useForm<LandForm>({
     resolver: zodResolver(landSchema),
     defaultValues: {
-      area: "",
+      surveyNumber: "",
+      area: 1,
       landType: "irrigated",
       ownershipType: "owned",
+      soilType: "black",
     },
   });
 
@@ -122,8 +141,9 @@ export default function Profile() {
     resolver: zodResolver(cropSchema),
     defaultValues: {
       cropName: "",
+      variety: "",
       season: "kharif",
-      area: "",
+      area: 1,
       year: new Date().getFullYear(),
     },
   });
@@ -133,20 +153,21 @@ export default function Profile() {
     defaultValues: {
       animalType: "cow",
       count: 1,
+      breed: "",
     },
   });
 
-  // Update form when profile data loads
+  // Update forms when profile data loads
   useEffect(() => {
     if (farmerProfile) {
-      profileForm.reset({
+      personalForm.reset({
         name: farmerProfile.name || "",
         fatherName: farmerProfile.fatherName || "",
         age: farmerProfile.age || 25,
         gender: farmerProfile.gender || "male",
         category: farmerProfile.category || "general",
-        aadharNumber: farmerProfile.aadharNumber || "",
         mobileNumber: farmerProfile.mobileNumber || "",
+        aadharNumber: farmerProfile.aadharNumber || "",
         address: farmerProfile.address || "",
         village: farmerProfile.village || "",
         district: farmerProfile.district || "",
@@ -154,25 +175,20 @@ export default function Profile() {
         pincode: farmerProfile.pincode || "",
         bankAccountNumber: farmerProfile.bankAccountNumber || "",
         ifscCode: farmerProfile.ifscCode || "",
-        language: farmerProfile.language || "en",
+        language: farmerProfile.language || language,
       });
     }
-  }, [farmerProfile, profileForm]);
+  }, [farmerProfile, personalForm, language]);
 
   // Mutations
   const updateProfileMutation = useMutation({
-    mutationFn: (data: any) => {
-      const url = farmerProfile ? "/api/farmer/profile" : "/api/farmer/profile";
-      const method = farmerProfile ? "PUT" : "POST";
-      return apiRequest(method, url, data);
-    },
+    mutationFn: (data: PersonalInfoForm) => apiRequest('PUT', '/api/farmer/profile', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/farmer/profile"] });
       toast({
         title: "Profile Updated",
-        description: "Your profile has been successfully updated.",
+        description: "Your profile has been updated successfully.",
       });
-      setIsEditing(false);
     },
     onError: (error: any) => {
       toast({
@@ -184,57 +200,107 @@ export default function Profile() {
   });
 
   const addLandMutation = useMutation({
-    mutationFn: (data: LandForm) => apiRequest("POST", "/api/farmer/lands", data),
+    mutationFn: (data: LandForm) => apiRequest('POST', '/api/farmer/lands', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/farmer/profile"] });
-      toast({ title: "Land Added", description: "Land information has been added successfully." });
-      setShowAddLand(false);
       landForm.reset();
+      toast({
+        title: "Land Added",
+        description: "Land record has been added successfully.",
+      });
     },
     onError: (error: any) => {
       toast({
         title: "Failed to Add Land",
-        description: error.message,
+        description: error.message || "Failed to add land record",
         variant: "destructive",
       });
     },
   });
 
   const addCropMutation = useMutation({
-    mutationFn: (data: CropForm) => apiRequest("POST", "/api/farmer/crops", data),
+    mutationFn: (data: CropForm) => apiRequest('POST', '/api/farmer/crops', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/farmer/profile"] });
-      toast({ title: "Crop Added", description: "Crop information has been added successfully." });
-      setShowAddCrop(false);
       cropForm.reset();
+      toast({
+        title: "Crop Added",
+        description: "Crop record has been added successfully.",
+      });
     },
     onError: (error: any) => {
       toast({
         title: "Failed to Add Crop",
-        description: error.message,
+        description: error.message || "Failed to add crop record",
         variant: "destructive",
       });
     },
   });
 
   const addLivestockMutation = useMutation({
-    mutationFn: (data: LivestockForm) => apiRequest("POST", "/api/farmer/livestock", data),
+    mutationFn: (data: LivestockForm) => apiRequest('POST', '/api/farmer/livestock', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/farmer/profile"] });
-      toast({ title: "Livestock Added", description: "Livestock information has been added successfully." });
-      setShowAddLivestock(false);
       livestockForm.reset();
+      toast({
+        title: "Livestock Added",
+        description: "Livestock record has been added successfully.",
+      });
     },
     onError: (error: any) => {
       toast({
         title: "Failed to Add Livestock",
-        description: error.message,
+        description: error.message || "Failed to add livestock record",
         variant: "destructive",
       });
     },
   });
 
-  const onSubmitProfile = (data: FarmerProfileForm) => {
+  const detectLocationMutation = useMutation({
+    mutationFn: (address: string) => apiRequest('POST', '/api/location/detect', { address }),
+    onSuccess: (response: any) => {
+      if (response.ok) {
+        const data = response.json();
+        personalForm.setValue('district', data.district);
+        personalForm.setValue('state', data.state);
+        queryClient.invalidateQueries({ queryKey: ["/api/farmer/profile"] });
+        toast({
+          title: "Location Updated",
+          description: "Your location has been detected and updated.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Location Detection Failed",
+        description: error.message || "Failed to detect location",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle location detection
+  const handleDetectLocation = async () => {
+    const address = personalForm.getValues('address');
+    if (!address) {
+      toast({
+        title: "Address Required",
+        description: "Please enter your address first to detect location.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    try {
+      await detectLocationMutation.mutateAsync(address);
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  };
+
+  // Form submission handlers
+  const onSubmitPersonalInfo = (data: PersonalInfoForm) => {
     updateProfileMutation.mutate(data);
   };
 
@@ -250,87 +316,6 @@ export default function Profile() {
     addLivestockMutation.mutate(data);
   };
 
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast({
-        title: "Geolocation not supported",
-        description: "Your browser doesn't support geolocation.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        try {
-          // Reverse geocoding to get address details
-          const response = await fetch(
-            `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=demo&limit=1`
-          );
-          const data = await response.json();
-          
-          if (data.results && data.results.length > 0) {
-            const result = data.results[0];
-            const components = result.components;
-            
-            // Update form with location data
-            profileForm.setValue('state', components.state || '');
-            profileForm.setValue('district', components.state_district || components.county || '');
-            profileForm.setValue('village', components.village || components.town || components.city || '');
-            profileForm.setValue('pincode', components.postcode || '');
-            
-            // Update address if empty
-            if (!profileForm.getValues('address')) {
-              profileForm.setValue('address', result.formatted || '');
-            }
-            
-            toast({
-              title: "Location Updated",
-              description: "Your location has been automatically filled. Please review and save.",
-            });
-          }
-        } catch (error) {
-          // Still update with coordinates
-          toast({
-            title: "Location Retrieved",
-            description: "Coordinates obtained. Please fill in address details manually.",
-          });
-        }
-        
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        let message = "Failed to get location.";
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            message = "Location access denied. Please allow location access and try again.";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            message = "Location information unavailable.";
-            break;
-          case error.TIMEOUT:
-            message = "Location request timed out.";
-            break;
-        }
-        
-        toast({
-          title: "Location Error",
-          description: message,
-          variant: "destructive",
-        });
-        setIsGettingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      }
-    );
-  };
-
   if (!user) {
     return null; // Will redirect in useEffect
   }
@@ -340,9 +325,10 @@ export default function Profile() {
       <Layout>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Skeleton className="h-8 w-64 mb-8" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Skeleton className="h-64" />
-            <Skeleton className="h-64" />
+          <div className="space-y-6">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-48" />
+            <Skeleton className="h-32" />
           </div>
         </div>
       </Layout>
@@ -360,14 +346,16 @@ export default function Profile() {
             </p>
           </div>
           
-          {farmerProfile && (
-            <div className="flex items-center space-x-2">
-              {farmerProfile.isVerified ? (
-                <Badge className="bg-success text-white">Verified</Badge>
-              ) : (
-                <Badge variant="outline" className="border-warning text-warning">Pending Verification</Badge>
-              )}
-            </div>
+          {farmerProfile?.isVerified ? (
+            <Badge className="bg-success text-white">
+              <CheckCircle className="w-4 h-4 mr-1" />
+              Verified
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-warning text-warning">
+              <AlertCircle className="w-4 h-4 mr-1" />
+              Incomplete
+            </Badge>
           )}
         </div>
 
@@ -377,54 +365,41 @@ export default function Profile() {
               <User className="w-4 h-4 mr-2" />
               Personal
             </TabsTrigger>
-            <TabsTrigger value="location" data-testid="tab-location">
+            <TabsTrigger value="land" data-testid="tab-land">
               <MapPin className="w-4 h-4 mr-2" />
-              Location
+              Land
             </TabsTrigger>
-            <TabsTrigger value="farming" data-testid="tab-farming">
-              <Crop className="w-4 h-4 mr-2" />
-              Farming
+            <TabsTrigger value="crops" data-testid="tab-crops">
+              <Wheat className="w-4 h-4 mr-2" />
+              Crops
             </TabsTrigger>
-            <TabsTrigger value="financial" data-testid="tab-financial">
-              <PiggyBank className="w-4 h-4 mr-2" />
-              Financial
+            <TabsTrigger value="livestock" data-testid="tab-livestock">
+              <Cow className="w-4 h-4 mr-2" />
+              Livestock
             </TabsTrigger>
           </TabsList>
 
           {/* Personal Information Tab */}
           <TabsContent value="personal">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Personal Information</CardTitle>
-                  <CardDescription>Basic personal details and identification</CardDescription>
-                </div>
-                <Button
-                  onClick={() => setIsEditing(!isEditing)}
-                  variant="outline"
-                  size="sm"
-                  data-testid="button-edit-personal"
-                >
-                  {isEditing ? <Save className="w-4 h-4 mr-2" /> : <Edit className="w-4 h-4 mr-2" />}
-                  {isEditing ? "Cancel" : "Edit"}
-                </Button>
+              <CardHeader>
+                <CardTitle>Personal Information</CardTitle>
+                <CardDescription>
+                  Update your personal details and contact information
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <Form {...profileForm}>
-                  <form onSubmit={profileForm.handleSubmit(onSubmitProfile)} className="space-y-6">
+                <Form {...personalForm}>
+                  <form onSubmit={personalForm.handleSubmit(onSubmitPersonalInfo)} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="name"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Full Name *</FormLabel>
                             <FormControl>
-                              <Input 
-                                {...field} 
-                                disabled={!isEditing}
-                                data-testid="input-name"
-                              />
+                              <Input placeholder="Enter your full name" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -432,17 +407,13 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="fatherName"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Father's Name</FormLabel>
                             <FormControl>
-                              <Input 
-                                {...field} 
-                                disabled={!isEditing}
-                                data-testid="input-father-name"
-                              />
+                              <Input placeholder="Enter father's name" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -450,7 +421,7 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="age"
                         render={({ field }) => (
                           <FormItem>
@@ -458,10 +429,9 @@ export default function Profile() {
                             <FormControl>
                               <Input 
                                 type="number" 
+                                placeholder="Enter your age"
                                 {...field}
                                 onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                                disabled={!isEditing}
-                                data-testid="input-age"
                               />
                             </FormControl>
                             <FormMessage />
@@ -470,18 +440,14 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="gender"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Gender *</FormLabel>
-                            <Select 
-                              onValueChange={field.onChange} 
-                              value={field.value}
-                              disabled={!isEditing}
-                            >
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
-                                <SelectTrigger data-testid="select-gender">
+                                <SelectTrigger>
                                   <SelectValue placeholder="Select gender" />
                                 </SelectTrigger>
                               </FormControl>
@@ -497,18 +463,14 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="category"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Category *</FormLabel>
-                            <Select 
-                              onValueChange={field.onChange} 
-                              value={field.value}
-                              disabled={!isEditing}
-                            >
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
-                                <SelectTrigger data-testid="select-category">
+                                <SelectTrigger>
                                   <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                               </FormControl>
@@ -525,18 +487,13 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="mobileNumber"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Mobile Number *</FormLabel>
                             <FormControl>
-                              <Input 
-                                {...field} 
-                                placeholder="10-digit mobile number"
-                                disabled={!isEditing}
-                                data-testid="input-mobile"
-                              />
+                              <Input placeholder="10-digit mobile number" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -544,18 +501,96 @@ export default function Profile() {
                       />
 
                       <FormField
-                        control={profileForm.control}
+                        control={personalForm.control}
                         name="aadharNumber"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Aadhar Number</FormLabel>
                             <FormControl>
-                              <Input 
-                                {...field} 
-                                placeholder="12-digit Aadhar number"
-                                disabled={!isEditing}
-                                data-testid="input-aadhar"
-                              />
+                              <Input placeholder="12-digit Aadhar number" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={personalForm.control}
+                        name="language"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Preferred Language</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select language" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="en">English</SelectItem>
+                                <SelectItem value="hi">हिंदी</SelectItem>
+                                <SelectItem value="te">తెలుగు</SelectItem>
+                                <SelectItem value="ta">தமிழ்</SelectItem>
+                                <SelectItem value="bn">বাংলা</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={personalForm.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address *</FormLabel>
+                          <FormControl>
+                            <Textarea placeholder="Complete address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <FormField
+                        control={personalForm.control}
+                        name="village"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Village *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Village name" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={personalForm.control}
+                        name="district"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>District *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="District name" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={personalForm.control}
+                        name="state"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>State *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="State name" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -563,690 +598,565 @@ export default function Profile() {
                       />
                     </div>
 
-                    {isEditing && (
-                      <div className="flex justify-end space-x-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField
+                        control={personalForm.control}
+                        name="pincode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Pincode *</FormLabel>
+                            <FormControl>
+                              <Input placeholder="6-digit pincode" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="flex items-end">
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => setIsEditing(false)}
-                          data-testid="button-cancel-personal"
+                          onClick={handleDetectLocation}
+                          disabled={isDetectingLocation}
+                          className="w-full"
                         >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="submit"
-                          className="bg-primary hover:bg-primary/90"
-                          disabled={updateProfileMutation.isPending}
-                          data-testid="button-save-personal"
-                        >
-                          {updateProfileMutation.isPending && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {isDetectingLocation ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Navigation className="w-4 h-4 mr-2" />
                           )}
-                          Save Changes
+                          Detect Location
                         </Button>
                       </div>
-                    )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField
+                        control={personalForm.control}
+                        name="bankAccountNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Bank Account Number</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Bank account number" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={personalForm.control}
+                        name="ifscCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>IFSC Code</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Bank IFSC code" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button 
+                        type="submit" 
+                        disabled={updateProfileMutation.isPending}
+                        className="bg-primary hover:bg-primary/90"
+                      >
+                        {updateProfileMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4 mr-2" />
+                        )}
+                        Save Profile
+                      </Button>
+                    </div>
                   </form>
                 </Form>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Location Tab */}
-          <TabsContent value="location">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Location Details</CardTitle>
-                  <CardDescription>Address and location information</CardDescription>
-                </div>
-                <Button
-                  onClick={getCurrentLocation}
-                  variant="outline"
-                  size="sm"
-                  disabled={isGettingLocation || !isEditing}
-                  data-testid="button-get-location"
-                >
-                  {isGettingLocation ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Navigation className="w-4 h-4 mr-2" />
-                  )}
-                  {isGettingLocation ? "Getting Location..." : "Update Location"}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <Form {...profileForm}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
-                    <FormField
-                      control={profileForm.control}
-                      name="address"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Address *</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              {...field} 
-                              placeholder="Complete address"
-                              disabled={!isEditing}
-                              data-testid="textarea-address"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={profileForm.control}
-                    name="village"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Village *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            disabled={!isEditing}
-                            data-testid="input-village"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={profileForm.control}
-                    name="district"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>District *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            disabled={!isEditing}
-                            data-testid="input-district"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={profileForm.control}
-                    name="state"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>State *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            disabled={!isEditing}
-                            data-testid="input-state"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={profileForm.control}
-                    name="pincode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pincode *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            placeholder="6-digit pincode"
-                            disabled={!isEditing}
-                            data-testid="input-pincode"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  </div>
-                </Form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Farming Tab */}
-          <TabsContent value="farming">
+          {/* Land Information Tab */}
+          <TabsContent value="land">
             <div className="space-y-6">
-              {/* Land Holdings */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Land Holdings</CardTitle>
-                    <CardDescription>Details about your land parcels</CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => setShowAddLand(true)}
-                    size="sm"
-                    className="bg-primary hover:bg-primary/90"
-                    data-testid="button-add-land"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Land
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  {farmerProfile?.lands && farmerProfile.lands.length > 0 ? (
+              {/* Existing Land Records */}
+              {farmerProfile?.lands && farmerProfile.lands.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Land Records</CardTitle>
+                    <CardDescription>
+                      Manage your land holdings and ownership details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
                     <div className="space-y-4">
                       {farmerProfile.lands.map((land: any, index: number) => (
-                        <div key={land.id} className="border rounded-lg p-4" data-testid={`land-item-${index}`}>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                              <p className="font-medium text-gray-500">Area</p>
-                              <p>{land.area} acres</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Type</p>
-                              <p className="capitalize">{land.landType}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Ownership</p>
-                              <p className="capitalize">{land.ownershipType}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Survey No.</p>
-                              <p>{land.surveyNumber || "Not specified"}</p>
+                        <div key={land.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Survey Number</p>
+                                <p className="text-sm">{land.surveyNumber || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Area</p>
+                                <p className="text-sm">{land.area} acres</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Land Type</p>
+                                <p className="text-sm capitalize">{land.landType}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Ownership</p>
+                                <p className="text-sm capitalize">{land.ownershipType}</p>
+                              </div>
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500" data-testid="no-lands-message">
-                      <p>No land information added yet</p>
-                      <p className="text-sm mt-1">Add your land details to get better scheme recommendations</p>
-                    </div>
-                  )}
+                  </CardContent>
+                </Card>
+              )}
 
-                  {showAddLand && (
-                    <Card className="mt-4 border-primary/20">
-                      <CardHeader>
-                        <CardTitle className="text-lg">Add Land Information</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Form {...landForm}>
-                          <form onSubmit={landForm.handleSubmit(onSubmitLand)} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <FormField
-                                control={landForm.control}
-                                name="area"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Area (acres) *</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="e.g., 2.5" data-testid="input-land-area" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={landForm.control}
-                                name="landType"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Land Type *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger data-testid="select-land-type">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="irrigated">Irrigated</SelectItem>
-                                        <SelectItem value="rain-fed">Rain-fed</SelectItem>
-                                        <SelectItem value="dry">Dry</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={landForm.control}
-                                name="ownershipType"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Ownership *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger data-testid="select-ownership-type">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="owned">Owned</SelectItem>
-                                        <SelectItem value="leased">Leased</SelectItem>
-                                        <SelectItem value="sharecropper">Sharecropper</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={landForm.control}
-                                name="surveyNumber"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Survey Number</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="Optional" data-testid="input-survey-number" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-
-                            <div className="flex justify-end space-x-4">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowAddLand(false)}
-                                data-testid="button-cancel-land"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="submit"
-                                className="bg-primary hover:bg-primary/90"
-                                disabled={addLandMutation.isPending}
-                                data-testid="button-save-land"
-                              >
-                                {addLandMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Add Land
-                              </Button>
-                            </div>
-                          </form>
-                        </Form>
-                      </CardContent>
-                    </Card>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Crops */}
+              {/* Add New Land */}
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Crops</CardTitle>
-                    <CardDescription>Current and historical crop information</CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => setShowAddCrop(true)}
-                    size="sm"
-                    className="bg-primary hover:bg-primary/90"
-                    data-testid="button-add-crop"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Crop
-                  </Button>
+                <CardHeader>
+                  <CardTitle>Add New Land</CardTitle>
+                  <CardDescription>
+                    Add details about your land holdings
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {farmerProfile?.crops && farmerProfile.crops.length > 0 ? (
-                    <div className="space-y-4">
-                      {farmerProfile.crops.map((crop: any, index: number) => (
-                        <div key={crop.id} className="border rounded-lg p-4" data-testid={`crop-item-${index}`}>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                              <p className="font-medium text-gray-500">Crop</p>
-                              <p>{crop.cropName}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Season</p>
-                              <p className="capitalize">{crop.season}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Area</p>
-                              <p>{crop.area} acres</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Year</p>
-                              <p>{crop.year}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500" data-testid="no-crops-message">
-                      <p>No crop information added yet</p>
-                      <p className="text-sm mt-1">Add your crop details for better recommendations</p>
-                    </div>
-                  )}
+                  <Form {...landForm}>
+                    <form onSubmit={landForm.handleSubmit(onSubmitLand)} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={landForm.control}
+                          name="surveyNumber"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Survey Number</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Survey/Gat number" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                  {showAddCrop && (
-                    <Card className="mt-4 border-primary/20">
-                      <CardHeader>
-                        <CardTitle className="text-lg">Add Crop Information</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Form {...cropForm}>
-                          <form onSubmit={cropForm.handleSubmit(onSubmitCrop)} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <FormField
-                                control={cropForm.control}
-                                name="cropName"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Crop Name *</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="e.g., Rice, Wheat, Cotton" data-testid="input-crop-name" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                        <FormField
+                          control={landForm.control}
+                          name="area"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Area (in acres) *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  step="0.1"
+                                  placeholder="Land area in acres"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                              <FormField
-                                control={cropForm.control}
-                                name="variety"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Variety</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="e.g., PR 106, Lok 1" data-testid="input-crop-variety" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                        <FormField
+                          control={landForm.control}
+                          name="landType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Land Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select land type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="irrigated">Irrigated</SelectItem>
+                                  <SelectItem value="rain-fed">Rain-fed</SelectItem>
+                                  <SelectItem value="dry">Dry Land</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                              <FormField
-                                control={cropForm.control}
-                                name="season"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Season *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger data-testid="select-crop-season">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="kharif">Kharif</SelectItem>
-                                        <SelectItem value="rabi">Rabi</SelectItem>
-                                        <SelectItem value="summer">Summer</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                        <FormField
+                          control={landForm.control}
+                          name="ownershipType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Ownership Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select ownership type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="owned">Owned</SelectItem>
+                                  <SelectItem value="leased">Leased</SelectItem>
+                                  <SelectItem value="sharecropper">Sharecropper</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                              <FormField
-                                control={cropForm.control}
-                                name="area"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Area (acres) *</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="e.g., 1.5" data-testid="input-crop-area" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
+                        <FormField
+                          control={landForm.control}
+                          name="soilType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Soil Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select soil type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="black">Black Soil</SelectItem>
+                                  <SelectItem value="red">Red Soil</SelectItem>
+                                  <SelectItem value="alluvial">Alluvial Soil</SelectItem>
+                                  <SelectItem value="sandy">Sandy Soil</SelectItem>
+                                  <SelectItem value="clay">Clay Soil</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
-                            <div className="flex justify-end space-x-4">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowAddCrop(false)}
-                                data-testid="button-cancel-crop"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="submit"
-                                className="bg-primary hover:bg-primary/90"
-                                disabled={addCropMutation.isPending}
-                                data-testid="button-save-crop"
-                              >
-                                {addCropMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Add Crop
-                              </Button>
-                            </div>
-                          </form>
-                        </Form>
-                      </CardContent>
-                    </Card>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Livestock */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Livestock</CardTitle>
-                    <CardDescription>Information about your animals</CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => setShowAddLivestock(true)}
-                    size="sm"
-                    className="bg-primary hover:bg-primary/90"
-                    data-testid="button-add-livestock"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Livestock
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  {farmerProfile?.livestock && farmerProfile.livestock.length > 0 ? (
-                    <div className="space-y-4">
-                      {farmerProfile.livestock.map((animal: any, index: number) => (
-                        <div key={animal.id} className="border rounded-lg p-4" data-testid={`livestock-item-${index}`}>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                            <div>
-                              <p className="font-medium text-gray-500">Animal Type</p>
-                              <p className="capitalize">{animal.animalType}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Count</p>
-                              <p>{animal.count}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-500">Breed</p>
-                              <p>{animal.breed || "Not specified"}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500" data-testid="no-livestock-message">
-                      <p>No livestock information added yet</p>
-                      <p className="text-sm mt-1">Add livestock details if applicable</p>
-                    </div>
-                  )}
-
-                  {showAddLivestock && (
-                    <Card className="mt-4 border-primary/20">
-                      <CardHeader>
-                        <CardTitle className="text-lg">Add Livestock Information</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Form {...livestockForm}>
-                          <form onSubmit={livestockForm.handleSubmit(onSubmitLivestock)} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <FormField
-                                control={livestockForm.control}
-                                name="animalType"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Animal Type *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger data-testid="select-animal-type">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="cow">Cow</SelectItem>
-                                        <SelectItem value="buffalo">Buffalo</SelectItem>
-                                        <SelectItem value="goat">Goat</SelectItem>
-                                        <SelectItem value="sheep">Sheep</SelectItem>
-                                        <SelectItem value="poultry">Poultry</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={livestockForm.control}
-                                name="count"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Count *</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                                        placeholder="Number of animals"
-                                        data-testid="input-livestock-count"
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={livestockForm.control}
-                                name="breed"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Breed</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} placeholder="Optional" data-testid="input-livestock-breed" />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-
-                            <div className="flex justify-end space-x-4">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowAddLivestock(false)}
-                                data-testid="button-cancel-livestock"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="submit"
-                                className="bg-primary hover:bg-primary/90"
-                                disabled={addLivestockMutation.isPending}
-                                data-testid="button-save-livestock"
-                              >
-                                {addLivestockMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Add Livestock
-                              </Button>
-                            </div>
-                          </form>
-                        </Form>
-                      </CardContent>
-                    </Card>
-                  )}
+                      <div className="flex justify-end">
+                        <Button 
+                          type="submit" 
+                          disabled={addLandMutation.isPending}
+                          className="bg-success hover:bg-success/90"
+                        >
+                          {addLandMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4 mr-2" />
+                          )}
+                          Add Land
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* Financial Tab */}
-          <TabsContent value="financial">
-            <Card>
-              <CardHeader>
-                <CardTitle>Financial Information</CardTitle>
-                <CardDescription>Bank account and financial details for benefit transfers</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...profileForm}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                    control={profileForm.control}
-                    name="bankAccountNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bank Account Number</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            placeholder="Bank account number"
-                            disabled={!isEditing}
-                            data-testid="input-bank-account"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={profileForm.control}
-                    name="ifscCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>IFSC Code</FormLabel>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            placeholder="Bank IFSC code"
-                            disabled={!isEditing}
-                            data-testid="input-ifsc-code"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  </div>
-                </Form>
-
-                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <PiggyBank className="h-5 w-5 text-blue-400" />
+          {/* Crops Tab */}
+          <TabsContent value="crops">
+            <div className="space-y-6">
+              {/* Existing Crops */}
+              {farmerProfile?.crops && farmerProfile.crops.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Crops</CardTitle>
+                    <CardDescription>
+                      Current and historical crop information
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {farmerProfile.crops.map((crop: any) => (
+                        <div key={crop.id} className="border rounded-lg p-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Crop</p>
+                              <p className="text-sm capitalize">{crop.cropName}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Variety</p>
+                              <p className="text-sm">{crop.variety || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Season</p>
+                              <p className="text-sm capitalize">{crop.season}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Area</p>
+                              <p className="text-sm">{crop.area} acres</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                        Why we need this information
-                      </h3>
-                      <div className="mt-2 text-sm text-blue-700 dark:text-blue-400">
-                        <p>
-                          Bank account details are required for direct benefit transfer (DBT) of scheme payments.
-                          Your information is encrypted and secure.
-                        </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Add New Crop */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add New Crop</CardTitle>
+                  <CardDescription>
+                    Add information about crops you are growing
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...cropForm}>
+                    <form onSubmit={cropForm.handleSubmit(onSubmitCrop)} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={cropForm.control}
+                          name="cropName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Crop Name *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g., Rice, Wheat, Cotton" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={cropForm.control}
+                          name="variety"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Variety</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Crop variety" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={cropForm.control}
+                          name="season"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Season *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select season" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="kharif">Kharif (Monsoon)</SelectItem>
+                                  <SelectItem value="rabi">Rabi (Winter)</SelectItem>
+                                  <SelectItem value="summer">Summer</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={cropForm.control}
+                          name="area"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Area (in acres) *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  step="0.1"
+                                  placeholder="Crop area in acres"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={cropForm.control}
+                          name="year"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Year *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number"
+                                  placeholder="Crop year"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value) || new Date().getFullYear())}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
+
+                      <div className="flex justify-end">
+                        <Button 
+                          type="submit" 
+                          disabled={addCropMutation.isPending}
+                          className="bg-success hover:bg-success/90"
+                        >
+                          {addCropMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4 mr-2" />
+                          )}
+                          Add Crop
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Livestock Tab */}
+          <TabsContent value="livestock">
+            <div className="space-y-6">
+              {/* Existing Livestock */}
+              {farmerProfile?.livestock && farmerProfile.livestock.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Livestock</CardTitle>
+                    <CardDescription>
+                      Manage your livestock and animal husbandry details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {farmerProfile.livestock.map((animal: any) => (
+                        <div key={animal.id} className="border rounded-lg p-4">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Animal Type</p>
+                              <p className="text-sm capitalize">{animal.animalType}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Count</p>
+                              <p className="text-sm">{animal.count}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-600">Breed</p>
+                              <p className="text-sm">{animal.breed || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Add New Livestock */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add Livestock</CardTitle>
+                  <CardDescription>
+                    Add information about your animals
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...livestockForm}>
+                    <form onSubmit={livestockForm.handleSubmit(onSubmitLivestock)} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <FormField
+                          control={livestockForm.control}
+                          name="animalType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Animal Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select animal type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="cow">Cow</SelectItem>
+                                  <SelectItem value="buffalo">Buffalo</SelectItem>
+                                  <SelectItem value="goat">Goat</SelectItem>
+                                  <SelectItem value="sheep">Sheep</SelectItem>
+                                  <SelectItem value="poultry">Poultry</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={livestockForm.control}
+                          name="count"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Count *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number"
+                                  placeholder="Number of animals"
+                                  {...field}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={livestockForm.control}
+                          name="breed"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Breed</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Animal breed" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button 
+                          type="submit" 
+                          disabled={addLivestockMutation.isPending}
+                          className="bg-success hover:bg-success/90"
+                        >
+                          {addLivestockMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4 mr-2" />
+                          )}
+                          Add Livestock
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
